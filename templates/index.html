@@ -1,74 +1,119 @@
 {% extends 'base.html' %}
+{% block title %}Smart Travel Companion{% endblock %}
+
 {% block content %}
-<div class="row g-3 align-items-center mb-3">
-  <div class="col-sm-8">
-    <input id="cityInput" type="text" class="form-control form-control-lg" placeholder="Search a city (e.g., Paris)" />
-  </div>
-  <div class="col-sm-4 d-grid">
-    <button id="searchBtn" class="btn btn-primary btn-lg">Search</button>
-  </div>
-</div>
-
 <div class="row g-4">
-  <div class="col-lg-8">
-    <div id="map" class="card">
-      <div class="card-header">Map</div>
-      <div class="card-body p-0">
-        <div id="mapContainer"></div>
-      </div>
-    </div>
-
-    <div class="card mt-4">
-      <div class="card-header">Weather Forecast</div>
+  <div class="col-12">
+    <div class="card shadow-sm">
       <div class="card-body">
-        <canvas id="weatherChart" height="120"></canvas>
-      </div>
-    </div>
-
-    <div class="card mt-4">
-      <div class="card-header">Travel Cost Estimator</div>
-      <div class="card-body">
-        <div class="row g-2 mb-3">
-          <div class="col-md-4">
-            <select id="modeSelect" class="form-select">
-              <option value="driving-car" selected>Driving (Car)</option>
+        <div class="row g-3 align-items-end">
+          <div class="col-md-5">
+            <label class="form-label">Search city or location</label>
+            <input id="search-input" type="text" class="form-control" placeholder="e.g., Paris, Tokyo, New York">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Category</label>
+            <select id="category-select" class="form-select">
+              <option value="attractions">Attractions</option>
+              <option value="parks">Parks</option>
+              <option value="restaurants">Restaurants</option>
+              <option value="cafes">Cafes</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Mode</label>
+            <select id="mode-select" class="form-select">
+              <option value="driving-car">Driving</option>
               <option value="cycling-regular">Cycling</option>
               <option value="foot-walking">Walking</option>
             </select>
           </div>
-          <div class="col-md-8">
-            <div class="input-group">
-              <input id="destInput" type="text" class="form-control" placeholder="Destination city (e.g., Versailles)" />
-              <button id="costBtn" class="btn btn-outline-primary">Estimate</button>
-            </div>
+          <div class="col-md-2">
+            <button id="search-btn" class="btn btn-primary w-100"><i class="fa fa-search me-2"></i>Search</button>
           </div>
         </div>
-        <canvas id="costChart" height="120"></canvas>
-        <div class="mt-2" id="routeStats" ></div>
       </div>
     </div>
   </div>
 
-  <div class="col-lg-4">
-    <div class="card mb-4">
-      <div class="card-header">Place Recommendations</div>
+  <div class="col-lg-7">
+    <div class="card shadow-sm" id="weather-card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fa fa-cloud-sun me-2"></i>Weather</h5>
+        <span id="weather-location" class="text-muted small"></span>
+      </div>
       <div class="card-body">
-        <div class="btn-group mb-3" role="group">
-          <button class="btn btn-sm btn-outline-secondary place-filter" data-cat="attractions">Attractions</button>
-          <button class="btn btn-sm btn-outline-secondary place-filter" data-cat="parks">Parks</button>
-          <button class="btn btn-sm btn-outline-secondary place-filter" data-cat="restaurants">Restaurants</button>
-          <button class="btn btn-sm btn-outline-secondary place-filter" data-cat="cafes">Cafes</button>
+        <div class="row g-3">
+          <div class="col-6">
+            <div id="current-weather" class="display-6"></div>
+            <div id="current-description" class="text-muted"></div>
+          </div>
+          <div class="col-6">
+            <canvas id="forecastChart" height="120"></canvas>
+          </div>
         </div>
-        <div id="places" class="row row-cols-1 g-3"></div>
       </div>
     </div>
+  </div>
 
-    <div class="card">
+  <div class="col-lg-5">
+    <div class="card shadow-sm" id="route-card">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Bookmarks</span>
-        <button id="refreshBookmarks" class="btn btn-sm btn-outline-secondary">Refresh</button>
+        <h5 class="mb-0"><i class="fa fa-road me-2"></i>Travel Cost</h5>
+        <span id="route-summary" class="text-muted small"></span>
       </div>
-      <div class="card-body" id="bookmarks"></div>
+      <div class="card-body">
+        <canvas id="costChart" height="120"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card shadow-sm" id="map-card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="fa fa-map-location-dot me-2"></i>Map</h5>
+      </div>
+      <div class="card-body p-0">
+        <div id="map" style="height: 380px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card shadow-sm" id="places-card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fa fa-compass me-2"></i>Nearby Places</h5>
+        <div id="places-count" class="text-muted small"></div>
+      </div>
+      <div class="card-body">
+        <div id="places-grid" class="row g-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12" id="bookmarks">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fa fa-bookmark me-2"></i>Bookmarks</h5>
+        <button id="refresh-bookmarks" class="btn btn-outline-secondary btn-sm"><i class="fa fa-rotate"></i></button>
+      </div>
+      <div class="card-body">
+        {% if bookmarks %}
+          <div class="list-group" id="bookmarks-list">
+            {% for b in bookmarks %}
+              <div class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="fw-semibold">{{ b.name }}</div>
+                  <div class="text-muted small">{{ b.city }} {{ b.country }} ({{ '%.4f'|format(b.latitude) }}, {{ '%.4f'|format(b.longitude) }})</div>
+                </div>
+                <button class="btn btn-sm btn-outline-danger" data-bookmark-id="{{ b.id }}" onclick="deleteBookmark({{ b.id }})"><i class="fa fa-trash"></i></button>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-muted mb-0">No bookmarks yet. Save your favorite places!</p>
+        {% endif %}
+      </div>
     </div>
   </div>
 </div>

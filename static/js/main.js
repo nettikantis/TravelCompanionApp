@@ -1,224 +1,201 @@
-let map, markerGroup, routeLayer;
-let currentLocation = null; // {lat, lon, name}
-let weatherChart, costChart;
+let map;
+let markersLayer;
+let forecastChart;
+let costChart;
+let lastCoords = null;
 
 function initMap() {
-  map = L.map('mapContainer').setView([20, 0], 2);
+  map = L.map('map').setView([20, 0], 2);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
-  markerGroup = L.layerGroup().addTo(map);
+  markersLayer = L.layerGroup().addTo(map);
 }
 
-async function searchCity() {
-  const city = document.getElementById('cityInput').value.trim();
-  if (!city) return;
-  setLoading(true);
-  try {
-    const res = await fetch(`/api/search?city=${encodeURIComponent(city)}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Search failed');
-    currentLocation = { lat: data.lat, lon: data.lon, name: `${data.name}, ${data.country}` };
-
-    map.setView([data.lat, data.lon], 12);
-    if (markerGroup) markerGroup.clearLayers();
-    L.marker([data.lat, data.lon]).addTo(markerGroup).bindPopup(currentLocation.name).openPopup();
-
-    await Promise.all([
-      loadPlaces('attractions'),
-      loadWeather(),
-    ]);
-  } catch (e) {
-    alert(e.message);
-  } finally {
-    setLoading(false);
-  }
+function setMapCenter(lat, lon) {
+  map.setView([lat, lon], 12);
 }
 
-async function loadPlaces(category) {
-  if (!currentLocation) return;
-  const url = `/api/places?lat=${currentLocation.lat}&lon=${currentLocation.lon}&category=${encodeURIComponent(category)}`;
+function addMarker(lat, lon, title) {
+  const marker = L.marker([lat, lon]).addTo(markersLayer);
+  if (title) marker.bindPopup(title);
+  return marker;
+}
+
+function clearMarkers() {
+  markersLayer.clearLayers();
+}
+
+async function fetchJSON(url) {
   const res = await fetch(url);
-  const data = await res.json();
-  const container = document.getElementById('places');
-  container.innerHTML = '';
-
-  if (res.ok) {
-    data.places.forEach(p => {
-      const col = document.createElement('div');
-      col.className = 'col';
-      col.innerHTML = `
-        <div class="card place-card">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start">
-              <div>
-                <h6 class="mb-1">${p.name || 'Unknown'}</h6>
-                <div class="text-muted small">${p.category || ''}</div>
-                <div class="text-muted small">${p.address || ''}</div>
-              </div>
-              <div class="text-end">
-                <span class="badge text-bg-light badge-small">${Math.round((p.distance||0))} m</span>
-                <button class="btn btn-sm btn-outline-primary mt-2" data-lat="${p.lat}" data-lon="${p.lon}" data-name="${encodeURIComponent(p.name)}" data-cat="${encodeURIComponent(p.category || '')}" data-id="${p.id}" onclick="bookmarkPlace(this)">★</button>
-              </div>
-            </div>
-          </div>
-        </div>`;
-      container.appendChild(col);
-
-      if (p.lat && p.lon) {
-        L.marker([p.lat, p.lon]).addTo(markerGroup).bindPopup(p.name || 'Place');
-      }
-    });
-  } else {
-    container.innerHTML = `<div class="text-danger small">${data.error || 'Failed to load places'}</div>`;
-  }
+  if (!res.ok) throw new Error(`Request failed ${res.status}`);
+  return res.json();
 }
 
-async function loadWeather() {
-  const res = await fetch(`/api/weather?lat=${currentLocation.lat}&lon=${currentLocation.lon}`);
-  const data = await res.json();
-  if (!res.ok) {
-    console.error(data);
-    return;
-  }
-  const list = data.forecast.list;
-  const labels = list.map(i => new Date(i.dt * 1000).toLocaleString());
-  const temps = list.map(i => i.main.temp);
-
-  if (weatherChart) weatherChart.destroy();
-  const ctx = document.getElementById('weatherChart');
-  weatherChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'Temp (°C)',
-        data: temps,
-        borderColor: '#0d6efd',
-        backgroundColor: 'rgba(13,110,253,0.1)',
-        tension: 0.3,
-      }]
-    },
-    options: {
-      responsive: true,
-      scales: { y: { beginAtZero: false } }
-    }
+function renderPlaces(places) {
+  const grid = document.getElementById('places-grid');
+  grid.innerHTML = '';
+  document.getElementById('places-count').textContent = `${places.length} results`;
+  clearMarkers();
+  places.forEach(p => {
+    const col = document.createElement('div');
+    col.className = 'col-12 col-sm-6 col-lg-4';
+    col.innerHTML = `
+      <div class="card h-100 shadow-sm">
+        <div class="card-body d-flex flex-column">
+          <div class="d-flex align-items-start justify-content-between">
+            <div>
+              <h6 class="card-title mb-1">${p.name ?? 'Unknown'}</h6>
+              <div class="text-muted small">${p.category ?? ''}</div>
+            </div>
+            <button class="btn btn-outline-primary btn-sm" title="Bookmark" onclick='saveBookmark(${JSON.stringify(JSON.stringify(p))})'><i class="fa fa-bookmark"></i></button>
+          </div>
+          <div class="mt-2 small text-muted">${p.address ?? ''}</div>
+          <div class="mt-auto d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="panTo(${p.latitude}, ${p.longitude})"><i class="fa fa-location-crosshairs"></i> View</button>
+            <button class="btn btn-sm btn-outline-success" onclick="estimateRoute(${p.latitude}, ${p.longitude})"><i class="fa fa-route"></i> Route</button>
+          </div>
+        </div>
+      </div>`;
+    grid.appendChild(col);
+    addMarker(p.latitude, p.longitude, p.name);
   });
 }
 
-async function estimateCost() {
-  if (!currentLocation) return;
-  const dest = document.getElementById('destInput').value.trim();
-  if (!dest) return;
-
-  setLoading(true);
-  try {
-    const destRes = await fetch(`/api/search?city=${encodeURIComponent(dest)}`);
-    const destData = await destRes.json();
-    if (!destRes.ok) throw new Error(destData.error || 'Destination not found');
-
-    const mode = document.getElementById('modeSelect').value;
-    const qs = `start_lat=${currentLocation.lat}&start_lon=${currentLocation.lon}&end_lat=${destData.lat}&end_lon=${destData.lon}&mode=${encodeURIComponent(mode)}`;
-    const res = await fetch(`/api/travel?${qs}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Travel estimation failed');
-
-    // Draw route
-    if (routeLayer) routeLayer.remove();
-    if (data.geometry) {
-      routeLayer = L.geoJSON(data.geometry).addTo(map);
-      map.fitBounds(routeLayer.getBounds(), { padding: [20, 20] });
-    }
-
-    // Update stats
-    document.getElementById('routeStats').innerHTML = `
-      <div class="alert alert-light">
-        Distance: <strong>${data.distance_km} km</strong>, Duration: <strong>${data.duration_min} min</strong>, Cost: <strong>$${data.cost_usd}</strong>
-      </div>`;
-
-    // Cost chart
-    if (costChart) costChart.destroy();
-    const cctx = document.getElementById('costChart');
-    costChart = new Chart(cctx, {
-      type: 'doughnut',
-      data: {
-        labels: ['Fuel', 'Time'],
-        datasets: [{
-          data: [data.cost_breakdown.fuel, data.cost_breakdown.time],
-          backgroundColor: ['#0d6efd', '#20c997']
-        }]
-      },
-      options: { responsive: true }
-    });
-  } catch (e) {
-    alert(e.message);
-  } finally {
-    setLoading(false);
-  }
-}
-
-async function bookmarkPlace(btn) {
-  const lat = parseFloat(btn.getAttribute('data-lat'));
-  const lon = parseFloat(btn.getAttribute('data-lon'));
-  const name = decodeURIComponent(btn.getAttribute('data-name') || '');
-  const category = decodeURIComponent(btn.getAttribute('data-cat') || '');
-  const external_id = btn.getAttribute('data-id') || null;
-  const city = (currentLocation && currentLocation.name) || '';
-
-  const res = await fetch('/api/bookmarks', {
+function saveBookmark(serialized) {
+  const p = JSON.parse(serialized);
+  fetch('/api/bookmarks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ city, name, category, lat, lon, external_id })
-  });
-  if (res.ok) {
-    loadBookmarks();
-  }
+    body: JSON.stringify({
+      name: p.name || 'Place',
+      latitude: p.latitude,
+      longitude: p.longitude,
+      city: p.city || '',
+      country: p.country || '',
+      notes: p.address || ''
+    })
+  }).then(() => refreshBookmarks());
 }
 
-async function loadBookmarks() {
-  const res = await fetch('/api/bookmarks');
-  const data = await res.json();
-  const container = document.getElementById('bookmarks');
-  container.innerHTML = '';
-  if (res.ok) {
-    if (!data.bookmarks.length) {
-      container.innerHTML = '<div class="text-muted small">No bookmarks yet</div>';
-      return;
-    }
-    data.bookmarks.forEach(b => {
-      const div = document.createElement('div');
-      div.className = 'd-flex justify-content-between align-items-center border rounded p-2 mb-2';
-      div.innerHTML = `
-        <div>
-          <div class="fw-semibold">${b.name}</div>
-          <div class="text-muted small">${b.city}</div>
-        </div>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteBookmark(${b.id})">Delete</button>
-      `;
-      container.appendChild(div);
+function deleteBookmark(id) {
+  fetch(`/api/bookmarks/${id}`, { method: 'DELETE' })
+    .then(() => refreshBookmarks());
+}
+
+function refreshBookmarks() {
+  fetch('/api/bookmarks')
+    .then(r => r.json())
+    .then(items => {
+      const list = document.getElementById('bookmarks-list');
+      if (!list) return;
+      list.innerHTML = '';
+      items.forEach(b => {
+        const div = document.createElement('div');
+        div.className = 'list-group-item d-flex justify-content-between align-items-center';
+        div.innerHTML = `
+          <div>
+            <div class="fw-semibold">${b.name}</div>
+            <div class="text-muted small">${b.city ?? ''} ${b.country ?? ''} (${b.latitude.toFixed(4)}, ${b.longitude.toFixed(4)})</div>
+          </div>
+          <button class="btn btn-sm btn-outline-danger" onclick="deleteBookmark(${b.id})"><i class="fa fa-trash"></i></button>`;
+        list.appendChild(div);
+      });
     });
+}
+
+function renderWeather(current, forecastList, locationLabel) {
+  document.getElementById('weather-location').textContent = locationLabel || '';
+  const temp = current?.main?.temp;
+  const desc = current?.weather?.[0]?.description;
+  document.getElementById('current-weather').textContent = (temp !== undefined) ? `${Math.round(temp)}°` : '--';
+  document.getElementById('current-description').textContent = desc ? desc : '';
+
+  const labels = forecastList.map(i => i.dt_txt?.slice(5, 16) || '');
+  const temps = forecastList.map(i => i.main?.temp ?? null);
+  if (forecastChart) forecastChart.destroy();
+  const ctx = document.getElementById('forecastChart').getContext('2d');
+  forecastChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Temp',
+        data: temps,
+        borderColor: '#0d6efd',
+        backgroundColor: 'rgba(13,110,253,0.2)',
+        tension: 0.35,
+        fill: true,
+      }]
+    },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: false } } }
+  });
+}
+
+function renderCostChart(cost) {
+  if (costChart) costChart.destroy();
+  const ctx = document.getElementById('costChart').getContext('2d');
+  costChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Fuel', 'Time'],
+      datasets: [{
+        data: [cost.cost_breakdown?.fuel ?? 0, cost.cost_breakdown?.time ?? 0],
+        backgroundColor: ['#20c997', '#ffc107']
+      }]
+    },
+    options: { plugins: { legend: { position: 'bottom' } } }
+  });
+}
+
+function panTo(lat, lon) {
+  setMapCenter(lat, lon);
+}
+
+async function estimateRoute(destLat, destLon) {
+  if (!lastCoords) return;
+  const mode = document.getElementById('mode-select').value;
+  const url = `/api/route?start_lat=${lastCoords.lat}&start_lon=${lastCoords.lon}&end_lat=${destLat}&end_lon=${destLon}&mode=${encodeURIComponent(mode)}`;
+  const data = await fetchJSON(url);
+  if (data.distance_km != null) {
+    document.getElementById('route-summary').textContent = `${data.distance_km} km • ${data.duration_min} min`;
+    renderCostChart({ cost_breakdown: { fuel: data.cost_usd ? data.cost_usd * 0.7 : 0, time: data.cost_usd ? data.cost_usd * 0.3 : 0 } });
   }
 }
 
-async function deleteBookmark(id) {
-  const res = await fetch(`/api/bookmarks/${id}`, { method: 'DELETE' });
-  if (res.ok) loadBookmarks();
-}
+async function onSearch() {
+  const query = document.getElementById('search-input').value.trim();
+  const category = document.getElementById('category-select').value;
+  if (!query) return;
 
-function setLoading(state) {
-  const btn = document.getElementById('searchBtn');
-  btn.disabled = !!state;
-  btn.textContent = state ? 'Searching...' : 'Search';
+  const search = await fetchJSON(`/api/search?q=${encodeURIComponent(query)}`);
+  const center = search?.center || search?.results?.[0]?.center;
+  const label = search?.label || search?.results?.[0]?.label || query;
+  if (center) {
+    lastCoords = { lat: center.lat, lon: center.lon };
+    setMapCenter(center.lat, center.lon);
+
+    const w = await fetchJSON(`/api/weather?lat=${center.lat}&lon=${center.lon}`);
+    renderWeather(w.current, w.forecast?.list || [], label);
+
+    const placesRes = await fetchJSON(`/api/search?q=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}`);
+    const places = placesRes.places || placesRes.results || [];
+    renderPlaces(places.map(p => ({
+      name: p.name,
+      category: p.category,
+      latitude: p.latitude || p.lat,
+      longitude: p.longitude || p.lon,
+      address: p.address,
+      city: p.city,
+      country: p.country
+    })).filter(p => p.latitude && p.longitude));
+  }
 }
 
 window.addEventListener('DOMContentLoaded', () => {
   initMap();
-  document.getElementById('searchBtn').addEventListener('click', searchCity);
-  document.getElementById('costBtn').addEventListener('click', estimateCost);
-  document.querySelectorAll('.place-filter').forEach(btn => {
-    btn.addEventListener('click', (e) => loadPlaces(btn.getAttribute('data-cat')));
-  });
-  document.getElementById('refreshBookmarks').addEventListener('click', loadBookmarks);
-  loadBookmarks();
+  const btn = document.getElementById('search-btn');
+  btn?.addEventListener('click', onSearch);
+  document.getElementById('refresh-bookmarks')?.addEventListener('click', refreshBookmarks);
 });

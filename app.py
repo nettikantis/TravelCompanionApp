@@ -3,50 +3,35 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 
-# Initialize extensions
-load_dotenv()
-db = SQLAlchemy()
+# Initialize the database instance
+from models import db
 
 
-def create_app():
-    app = Flask(__name__, template_folder="templates", static_folder="static")
+def create_app() -> Flask:
+    load_dotenv()
 
-    # Basic configuration
-    app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-secret-key")
+    app = Flask(__name__, static_folder="static", template_folder="templates")
+    app.config.from_object("config.Config")
 
-    # Database configuration
-    default_sqlite_path = os.path.join(os.getcwd(), "instance", "app.db")
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
-        "DATABASE_URL", f"sqlite:///{default_sqlite_path}"
-    )
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
-    # Ensure instance folder exists
-    try:
-        os.makedirs(os.path.join(os.getcwd(), "instance"), exist_ok=True)
-    except OSError:
-        pass
-
-    # Initialize db
+    # Initialize extensions
     db.init_app(app)
 
-    # Import models so that SQLAlchemy is aware
-    from models import Bookmark  # noqa: F401
-
     # Register blueprints
-    from routes.ui import ui_bp
+    from routes.main import main_bp
     from routes.api import api_bp
 
-    app.register_blueprint(ui_bp)
+    app.register_blueprint(main_bp)
     app.register_blueprint(api_bp, url_prefix="/api")
 
-    # Create tables
+    # Create database tables if they don't exist
     with app.app_context():
         db.create_all()
 
     return app
 
 
+app = create_app()
+
+
 if __name__ == "__main__":
-    app = create_app()
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
