@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-3 align-items-center mb-3">
+  <div class="col-sm-8">
+    <input id="cityInput" type="text" class="form-control form-control-lg" placeholder="Search a city (e.g., Paris)" />
+  </div>
+  <div class="col-sm-4 d-grid">
+    <button id="searchBtn" class="btn btn-primary btn-lg">Search</button>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div id="map" class="card">
+      <div class="card-header">Map</div>
+      <div class="card-body p-0">
+        <div id="mapContainer"></div>
+      </div>
+    </div>
+
+    <div class="card mt-4">
+      <div class="card-header">Weather Forecast</div>
+      <div class="card-body">
+        <canvas id="weatherChart" height="120"></canvas>
+      </div>
+    </div>
+
+    <div class="card mt-4">
+      <div class="card-header">Travel Cost Estimator</div>
+      <div class="card-body">
+        <div class="row g-2 mb-3">
+          <div class="col-md-4">
+            <select id="modeSelect" class="form-select">
+              <option value="driving-car" selected>Driving (Car)</option>
+              <option value="cycling-regular">Cycling</option>
+              <option value="foot-walking">Walking</option>
+            </select>
+          </div>
+          <div class="col-md-8">
+            <div class="input-group">
+              <input id="destInput" type="text" class="form-control" placeholder="Destination city (e.g., Versailles)" />
+              <button id="costBtn" class="btn btn-outline-primary">Estimate</button>
+            </div>
+          </div>
+        </div>
+        <canvas id="costChart" height="120"></canvas>
+        <div class="mt-2" id="routeStats" ></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card mb-4">
+      <div class="card-header">Place Recommendations</div>
+      <div class="card-body">
+        <div class="btn-group mb-3" role="group">
+          <button class="btn btn-sm btn-outline-secondary place-filter" data-cat="attractions">Attractions</button>
+          <button class="btn btn-sm btn-outline-secondary place-filter" data-cat="parks">Parks</button>
+          <button class="btn btn-sm btn-outline-secondary place-filter" data-cat="restaurants">Restaurants</button>
+          <button class="btn btn-sm btn-outline-secondary place-filter" data-cat="cafes">Cafes</button>
+        </div>
+        <div id="places" class="row row-cols-1 g-3"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Bookmarks</span>
+        <button id="refreshBookmarks" class="btn btn-sm btn-outline-secondary">Refresh</button>
+      </div>
+      <div class="card-body" id="bookmarks"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/main.js"></script>
+{% endblock %}
